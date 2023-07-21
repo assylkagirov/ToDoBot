@@ -27,7 +27,8 @@ class DateBase:
             CREATE TABLE IF NOT EXISTS tasks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
-                description TEXT NOT NULL
+                description TEXT NOT NULL,
+                isdone BOOLEAN NOT NULL
             );
         """
         self.conn.execute(item)
@@ -35,15 +36,27 @@ class DateBase:
 
     # adding tasks
     def add_task(self, title, description):
-        item = "INSERT INTO tasks (title, description) VALUES (?, ?)"
+        item = "INSERT INTO tasks (title, description, isdone) VALUES (?, ?, 0)"
         self.conn.execute(item, (title, description))
         self.conn.commit()
 
      # list of all taks
-    def get_all_tasks(self):
-        query = "SELECT * FROM tasks"
-        cursor = self.conn.execute(query)
+    def get_alltasks(self):
+        item = "SELECT * FROM tasks"
+        cursor = self.conn.execute(item)
         return cursor.fetchall()
+
+    # deleting tasks
+    def delete_task(self, task_id):
+        item = "DELETE FROM tasks WHERE id = ?"
+        self.conn.execute(item, (task_id,))
+        self.conn.commit()
+
+    # isdone
+    def mark_done(self, task_id):
+        item = "UPDATE tasks SET isdone = 1 WHERE id = ?"
+        self.conn.execute(item, (task_id,))
+        self.conn.commit()
 
     # close db
     def close(self):
@@ -53,13 +66,17 @@ db = DateBase()
 
 
 @dp.message_handler(commands=['start'])
-async def send_welcome(message: types.Message):
-    await message.reply("Hello, i am bot to make your life better. My name is To Do list! \n"
-                        "There are several commands: \n"
-                        "/add <task> - adding task into list \n"
-                        "/list - list of tasks \n")
+async def send_hello(message: types.Message):
+    await message.reply(""" Hello, i am bot to make your life better. \nMy name is To Do list! \n
+                        There are several commands: \n
+                        /start - welcome message \n
+                        /add <task> - adding task into list \n
+                        /done <task> - mark task as done \n
+                        /list - list of tasks \n
+                        /delete <task> - delete the task by id \n
+                        """)
 
-# Команда /add
+# /add command
 @dp.message_handler(commands=['add'])
 async def add_task(message: types.Message):
     task = message.text.replace('/add', '').strip()
@@ -71,17 +88,46 @@ async def add_task(message: types.Message):
 
 
 
-# Команда /list
+# /list command
 @dp.message_handler(commands=['list'])
 async def show_list(message: types.Message):
-    tasks = db.get_all_tasks()
+    tasks = db.get_alltasks()
     if tasks:
-        list_text = "List of tasks:\n"
+        task_list = "List of tasks:\n"
         for idx, task in enumerate(tasks, start=1):
-            list_text += f"{idx}.{task[1]}\n"
-        await message.reply(list_text)
+            istaskdone = "✅" if task[3] else "❌"
+            mark = "🔖"
+            task_list += f"{mark} {idx}. {task[1]} {istaskdone}\n"
+        await message.reply(task_list)
     else:
         await message.reply("Oops, list of tasks is empty")
+
+# /delete commad
+@dp.message_handler(commands=['delete'])
+async def delete_task(message: types.Message):
+    try:
+        task_id = int(message.text.replace('/delete', '').strip())
+        tasks = db.get_alltasks()
+        if 1 <= task_id <= len(tasks):
+            db.delete_task(task_id)
+            await message.reply(f"Task '{tasks[task_id - 1][1]}' has been deleted")
+        else:
+            await message.reply("Incorrect id")
+    except ValueError:
+        await message.reply("You need to write id")
+
+@dp.message_handler(commands=['done'])
+async def mark_done(message: types.Message):
+    try:
+        task_id = int(message.text.replace('/done', '').strip())
+        tasks = db.get_alltasks()
+        if 1 <= task_id <= len(tasks):
+            db.mark_done(task_id)
+            await message.reply(f"Task '{tasks[task_id - 1][1]}' has been marked successfully")
+        else:
+            await message.reply("Incorrect id")
+    except ValueError:
+        await message.reply("You need to write id")
 
 
 
